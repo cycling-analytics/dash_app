@@ -3,11 +3,13 @@ import gzip
 from datetime import datetime, timedelta
 
 import pandas as pd
+import yaml
 from dash import Dash, html, dcc, callback, Output, Input, State, dash_table
 import dash_bootstrap_components as dbc
 from garmin_fit_sdk import Stream, Decoder
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import dash_leaflet as dl
 
 from aux import build_df, add_best_power_values, compute_avg_NP
 
@@ -62,26 +64,54 @@ def create_buttons():
 
 
 def create_upload():
-    component = dcc.Upload(
-        id='upload-fit-data',
-        children=html.Div([
-            'Drag and Drop or ',
-            html.A('Select fit.gz Files')
-        ]),
-        style={
-            'width': '100%',
-            'height': '60px',
-            'lineHeight': '60px',
-            'borderWidth': '1px',
-            'borderStyle': 'dashed',
-            'borderRadius': '5px',
-            'textAlign': 'center',
-            'margin': '10px',
-            'color': 'white'
-        },
-        # Allow multiple files to be uploaded
-        multiple=True
-    )
+    component = html.Div([
+        html.H2('Race files'),
+        dcc.Upload(
+            id='upload-fit-data',
+            children=html.Div([
+                'Drag and Drop or ',
+                html.A('Select fit.gz Files')
+            ]),
+            style={
+                'width': '100%',
+                'height': '60px',
+                'lineHeight': '60px',
+                'borderWidth': '1px',
+                'borderStyle': 'dashed',
+                'borderRadius': '5px',
+                'textAlign': 'center',
+                'margin': '10px',
+                'color': 'white'
+            },
+            # Allow multiple files to be uploaded
+            multiple=True
+        )])
+
+    return component
+
+
+def create_upload_rider_info():
+    component = html.Div([
+        html.H2("Rider Info"),
+        dcc.Upload(
+            id='upload-riders-data',
+            children=html.Div([
+                html.A('Select file with riders info')
+            ]),
+            style={
+                'width': '100%',
+                'height': '60px',
+                'lineHeight': '60px',
+                'borderWidth': '1px',
+                'borderStyle': 'dashed',
+                'borderRadius': '5px',
+                'textAlign': 'center',
+                'margin': '10px',
+                'color': 'white'
+            },
+            # Allow multiple files to be uploaded
+            multiple=False
+        )])
 
     return component
 
@@ -140,17 +170,30 @@ def create_riders_checklist():
     return component
 
 
+def create_map():
+    component = dl.Map(
+        id='map',
+        style={'width': '1000px', 'height': '500px'},
+        center=(50, 0),  # Initial position
+        zoom=14,  # Initial zoom level
+        children=[]
+    )
+
+    return component
+
+
 def create_dashboard():
     component = html.Div([
-        html.Div(children=[], id='output_table'),
-        html.Div(children=[], id='download_excel_button'),
-        html.Button('Download to excel', id='download-table'),
-        dcc.Download(id='download-table_xlsx'),
+        create_map(),
         dcc.Graph(id='kilojoules-graph', style={'display': 'none'}),
         dcc.Graph(id='follow_the_leader_plot', style={'display': 'none'}),
         dcc.Graph(id='speed_comparison-graph', style={'display': 'none'}),
+        html.Div(children=[], id='output_table'),
+        html.Div(children=[], id='download_excel_button'),
+        html.Button('Download to excel', id='download-table', style={'display': 'none'}),
+        dcc.Download(id='download-table_xlsx'),
     ],
-        style={'width': 790},
+        style={'width': 990},
     )
 
     return component
@@ -159,10 +202,10 @@ def create_dashboard():
 def create_layout():
     component = dbc.Container([
         html.Div([create_title(), create_buttons(),
-                  create_upload(), create_select_leader(),
+                  create_upload(), create_upload_rider_info(), create_select_leader(),
                   create_select_start(), create_riders_checklist(), ],
                  style={
-                     'width': 340,
+                     'width': 300,
                      'marginLeft': 35,
                      'marginTop': 35,
                      'marginBottom': 35
@@ -187,6 +230,7 @@ def create_layout():
 
 
 ############# Callbacks
+
 @callback(Output('memory-rides', 'data', allow_duplicate=True),
           Output('memory-corrected_rides', 'data', allow_duplicate=True),
           Output('leader-dropdown', 'options'),
@@ -205,29 +249,88 @@ def update_data(list_of_contents, list_of_names):
         for name, info in data.items():
             rides_dict_df[name] = build_df(info['ride'], info['events']).to_dict('records')
 
-
-
+        list_of_names = list(rides_dict_df.keys())
     return rides_dict_df, rides_dict_df, list_of_names, list_of_names, list_of_names
 
+
+@callback(Output('memory-riders-data', 'data', allow_duplicate=True),
+          Input('upload-riders-data', 'contents'),
+          State('upload-riders-data', 'filename'),
+          prevent_initial_call=True)
+def update_riders_data(content, name):
+    riders_dict = {}
+    if content is not None:
+        content_type, content_string = content.split(',')
+        decoded = base64.b64decode(content_string)
+
+        # Assuming the uploaded file is YAML
+        riders_dict = yaml.safe_load(decoded)
+
+    return riders_dict
+
+
+@callback(
+    Output('map', 'children'),
+    Output('map', 'center'),
+    Input('memory-corrected_rides', 'data'),
+)
+def update_map(rides):
+    children = []
+    center = (0,0)
+    if (rides is not None) and (len(rides) > 0):
+        #       rides_corrected = {name: pd.DataFrame(data) for name, data in rides.items()}
+        mean_starting_lat = sum([data[0]["position_lat"] for _, data in rides.items()])
+        mean_starting_lat /= len(rides)
+
+        mean_starting_long = sum([data[0]["position_long"] for _, data in rides.items()])
+        mean_starting_long /= len(rides)
+
+        center = ( mean_starting_lat, mean_starting_long)
+
+        marker_coords = [
+            (data[0]["position_lat"], data[0]["position_long"])
+            for _, data in rides.items()
+        ]
+
+        children = [
+            dl.TileLayer(),  # Base layer that provides the map
+            dl.LayerGroup([
+                dl.Marker(position=coord, children=[
+                    dl.Tooltip(f"{name}")
+                ]) for name, coord in zip(rides.keys(), marker_coords)
+            ])
+        ]
+
+    return children, center
 
 
 @callback(
     Output('output_table', 'children'),
     Output('memory-comparative_table', 'data', allow_duplicate=True),
     Input('memory-corrected_rides', 'data'),
+    Input('memory-riders-data', 'data'),
     prevent_initial_call=True,
 )
-def update_comparative_table(rides):
+def update_comparative_table(rides, riders_data):
     table = []
     comparative_table = {}
 
-    if rides is not None:
-        df_to_show = build_metrics(rides)
+    if (rides is not None) and (riders_data is not None):
+        df_to_show = build_metrics(rides, riders_data)
         table = [build_htmlTable(df_to_show)]
 
         comparative_table = df_to_show.to_dict("records")
 
     return table, comparative_table
+
+
+@callback(
+    Output('download-table', 'style'),
+    Input('output_table', 'children'),
+    prevent_initial_call=True,
+)
+def show_download_button(output_table):
+    return {'display': 'flex'}
 
 
 @callback(
@@ -247,26 +350,27 @@ def update_leader_comparative(rides, leader, selected_riders):
         #differences_df = pd.DataFrame()
 
         reference_df = pd.DataFrame(rides[leader])
+        reference_df.timestamp = pd.to_datetime(reference_df.timestamp)
 
         #Add activity profile to the graph
 
         fig.add_trace(
-            go.Scatter(x=reference_df.distance/1000, y=reference_df.altitude, mode='lines', name='altitude'),
+            go.Scatter(x=reference_df.distance / 1000, y=reference_df.altitude, mode='lines', name='altitude'),
             secondary_y=True
         )
 
         for rider in selected_riders:
             rider_data = rides[rider]
             rider_df = pd.DataFrame(rider_data)
+            rider_df.timestamp = pd.to_datetime(rider_df.timestamp)
 
             max_length = min(rider_df.shape[0], reference_df.shape[0])
 
             differences = rider_df.iloc[:max_length]['distance'].values - reference_df.iloc[:max_length][
                 'distance'].values
-            differences = differences / 1000
 
             fig.add_trace(
-                go.Scatter(x=reference_df.distance/1000, y=differences, mode='lines', name=rider),
+                go.Scatter(x=reference_df.distance / 1000, y=differences, mode='lines', name=rider),
                 secondary_y=False
             )
 
@@ -283,6 +387,7 @@ def update_leader_comparative(rides, leader, selected_riders):
 
     return fig, style
 
+
 @callback(
     Output('speed_comparison-graph', 'figure'),
     Output('speed_comparison-graph', 'style'),
@@ -290,7 +395,6 @@ def update_leader_comparative(rides, leader, selected_riders):
     prevent_initial_call=True,
 )
 def update_speed_comparison(rides):
-
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     style = {'display': 'none'}
 
@@ -300,17 +404,17 @@ def update_speed_comparison(rides):
         profile_plotted = False
         for rider, data in rides.items():
             df = pd.DataFrame(data)
+            df.timestamp = pd.to_datetime(df.timestamp)
 
             if not profile_plotted:
                 profile_plotted = True
                 fig.add_trace(
-                    go.Scatter(x=df['distance']/1000, y=df.altitude, mode='lines', name = 'Stage Profile'),
+                    go.Scatter(x=df['distance'] / 1000, y=df.altitude, mode='lines', name='Altitude'),
                     secondary_y=True
                 )
 
-
             fig.add_trace(
-                go.Scatter(x=df.distance/1000, y=df.speed, mode='lines', name=rider),
+                go.Scatter(x=df.distance / 1000, y=df.speed, mode='lines', name=rider),
                 secondary_y=False
             )
 
@@ -349,13 +453,12 @@ def update_kilojoules_per_hour(rides):
             if not profile_plotted:
                 profile_plotted = True
                 fig.add_trace(
-                    go.Scatter(x=df['distance']/1000, y=df['altitude'], mode='lines', name = 'Stage Profile'),
+                    go.Scatter(x=df['distance'] / 1000, y=df['altitude'], mode='lines', name='Altitude'),
                     secondary_y=True
                 )
 
-
             fig.add_trace(
-                go.Scatter(x=df['distance']/1000,y=df['kilojoules_last_hour'], mode='lines', name=rider),
+                go.Scatter(x=df['distance'] / 1000, y=df['kilojoules_last_hour'], mode='lines', name=rider),
                 secondary_y=False
             )
 
@@ -372,6 +475,7 @@ def update_kilojoules_per_hour(rides):
         fig.update_yaxes(title_text="Altitude (meters)", secondary_y=True)
 
     return fig, style
+
 
 @callback(
     Output('start_hour_input', 'value'),
@@ -456,8 +560,8 @@ def correct_rides(hour, minute, seconds, rides):
 )
 def download(n_clicks, comparative_table):
     df = pd.DataFrame(comparative_table)
-    return dcc.send_data_frame(df.to_excel, "comparative.xlsx", sheet_name="Sheet_name_1")
 
+    return dcc.send_data_frame(df.to_excel, "comparative.xlsx", sheet_name="Sheet_name_1")
 
 
 '''
@@ -496,7 +600,11 @@ def build_htmlTable(df):
 
 def parse_contents(content_files, filenames):
     data = {}
+    suffix = '.fit.gz'
     for content, name in zip(content_files, filenames):
+        if name.endswith(suffix):
+            name = name[:-len(suffix)].lower()
+
         content_type, content_string = content.split(',')
 
         decoded = base64.b64decode(content_string)
@@ -516,45 +624,85 @@ def parse_contents(content_files, filenames):
     return data
 
 
-def build_metrics(riders_data):
+def add_cs(df, period_list):
+    # period_list in minutes,
+    for period in period_list:
+        if 'power' in df.columns:
+            df[f'cs {period}'] = df['power'].rolling(period * 60).mean()
+        else:
+            df[f'cs {period}'] = 0
+
+    return df
+
+
+def build_metrics(riders_data, weight_ftp):
     data = []
     for rider, rider_data in riders_data.items():
+        if rider not in weight_ftp.keys():
+            ftp = 1
+            weight = 1
+        else:
+            ftp = weight_ftp[rider]['ftp']
+            weight = weight_ftp[rider]['weight']
+
         df = pd.DataFrame(rider_data)
-        # Build the best poers
+        df.timestamp = pd.to_datetime(df.timestamp)
+
+        # Build the best powers
         df = add_best_power_values(df, [30, 60, 600, 1200, 3600])
+        df = add_cs(df, [1, 5, 12])
 
         NP = compute_avg_NP(df)
+
+        df['above FTP'] = df['power'].apply(lambda x: 1 if x > ftp else 0)
+
+        AP_FTP = (df['above FTP'].sum() / df.shape[0]) * 100
 
         # computing coasting
         df['w is 0'] = df['power'].apply(lambda x: 1 if x <= 30 else 0)
 
-        coasting = df['w is 0'].sum() / df.shape[0]
+        coasting = (df['w is 0'].sum() / df.shape[0]) * 100
+
+        duration = df['timestamp'].iloc[-1] - df['timestamp'].iloc[0]
+
+        hours = duration.seconds // 3600
+
+        minutes = (duration.seconds - hours * 3600) // 60
+
+        seconds = duration.seconds - hours * 3600 - minutes * 60
+
+        duration_str = f'{hours}:{minutes:02d}:{seconds:02d}'
 
         row = {
             'name': rider,
+            'time': duration_str,
             'Pos': None,
             'Coasting': coasting,
             'distance': df['distance'].iloc[-1] / 1000,
             'Avg Speed': df['speed'].mean(),
             'Avg Power': df['power'].mean(),
             'NP': NP,
-            # 'IF': NP/ftps[rider],
-            'AP  FTP': None,
+            'IF': NP / ftp,
+            'AP  FTP': AP_FTP,
             'Work (Kj)': df['power'].sum() * 0.001,
-            # 'Power/kg': df['power'].mean()/weights[rider],
-            # 'NP/kg': NP/weights[rider],
-            # 'Kj/kg': df['power'].sum()*0.001 / weights[rider],
+            'Power/kg': df['power'].mean() / weight,
+            'NP/kg': NP / weight,
+            'Kj/kg': df['power'].sum() * 0.001 / weight,
             'Pmax': None,
             'Best 30" ': df['Best 30"'].max(),
             "Best 1'  ": df['Best 60"'].max(),
             "Best 10' ": df['Best 600"'].max(),
             "Best 20' ": df['Best 1200"'].max(),
             "Best 60' ": df['Best 3600"'].max(),
-            "CS 1' ": None,
-            "CS 5' ": None,
-            "CS 12' ": None,
+            "CS 1' ": (df['cs 1'].max() ** 2) / weight,
+            "CS 5' ": (df['cs 5'].max() ** 2) / weight,
+            "CS 12' ": (df['cs 12'].max() ** 2) / weight,
             'Avg HR': df['heart_rate'].mean() if 'heart_rate' in df.columns else 0
         }
+
+        for k, v in row.items():
+            if k != 'name' and k != 'time' and v is not None:
+                row[k] = round(v, 2)
 
         data.append(row)
 
@@ -565,6 +713,7 @@ def build_metrics(riders_data):
 
 def add_kilojoules_per_hour(data):
     df = pd.DataFrame(data)
+    df.timestamp = pd.to_datetime(df.timestamp)
 
     # Convert power in watts to kilojoules (1 watt-second = 0.001 kilojoules)
     df['kilojoules'] = df['power'] * 0.001
@@ -577,6 +726,8 @@ def add_kilojoules_per_hour(data):
     df['kilojoules_last_hour'] = tmp_df['kilojoules'].values
 
     return df
+
+
 ##########
 app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
 
@@ -586,8 +737,8 @@ app.layout = html.Div(
         #dcc.Store(id='store', data={})
         dcc.Store(id='memory-rides', data={}),
         dcc.Store(id='memory-corrected_rides', data={}),
-        dcc.Store(id='memory-comparative_table', data={})  #comparative_df
-
+        dcc.Store(id='memory-comparative_table', data={}),  #comparative_df
+        dcc.Store(id='memory-riders-data', data={}),
     ]
 
 )

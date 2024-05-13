@@ -4,7 +4,7 @@ body {
 
 .dashboard-container {
     width: 1400px;
-    height: 800px;
+    height: auto;
     margin-left: auto;
     margin-right: auto;
     margin-top: 50px;
