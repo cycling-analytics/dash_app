@@ -21,7 +21,7 @@ def create_title():
             html.Br(),
             html.Span("Dashboard")
         ]),
-        html.P("This dashboard prototype shows the initial functionality ")
+        html.P("This dashboard prototype shows the initial functionality 1")
     ],
         style={
             "verticalAlignment": "top",
@@ -32,6 +32,7 @@ def create_title():
 
 
 def create_buttons():
+    print('hola')
     component = html.Div(
         [
             html.Div(dbc.RadioItems(
