@@ -1,0 +1,9 @@
+dash==2.16.1
+dash_bootstrap_components==1.6.0
+dash_leaflet==1.0.15
+garmin_fit_sdk==21.133.0
+pandas==2.2.2
+plotly==5.21.0
+PyYAML==6.0.1
+gunicorn
+dash-tools

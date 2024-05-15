@@ -730,6 +730,7 @@ def add_kilojoules_per_hour(data):
 
 ##########
 app = Dash(__name__, external_stylesheets=[dbc.themes.FLATLY])
+server = app.server
 
 app.layout = html.Div(
     [
