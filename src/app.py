@@ -1,5 +1,7 @@
 import base64
 import gzip
+import logging
+import sys
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -32,7 +34,6 @@ def create_title():
 
 
 def create_buttons():
-    print('hola')
     component = html.Div(
         [
             html.Div(dbc.RadioItems(
@@ -201,6 +202,7 @@ def create_dashboard():
 
 
 def create_layout():
+    print(f"JF-->create_layout")
     component = dbc.Container([
         html.Div([create_title(), create_buttons(),
                   create_upload(), create_upload_rider_info(), create_select_leader(),
@@ -227,6 +229,7 @@ def create_layout():
         style={'display': 'flex'},
         className='dashboard-container')
 
+    print(f"JF<--create_layout")
     return component
 
 
@@ -241,6 +244,7 @@ def create_layout():
           State('upload-fit-data', 'filename'),
           prevent_initial_call=True)
 def update_data(list_of_contents, list_of_names):
+    print(f'JF-->update_data')
     rides_dict_df = {}
 
     if list_of_contents is not None:
@@ -249,8 +253,11 @@ def update_data(list_of_contents, list_of_names):
         rides_dict_df = {}
         for name, info in data.items():
             rides_dict_df[name] = build_df(info['ride'], info['events']).to_dict('records')
+            print(f'JF<- size of {name} dataframe: {sys.getsizeof(rides_dict_df[name])}')
 
         list_of_names = list(rides_dict_df.keys())
+
+    print(f'JF<--update_data')
     return rides_dict_df, rides_dict_df, list_of_names, list_of_names, list_of_names
 
 
@@ -259,6 +266,7 @@ def update_data(list_of_contents, list_of_names):
           State('upload-riders-data', 'filename'),
           prevent_initial_call=True)
 def update_riders_data(content, name):
+    print(f'JF-->update_riders_data')
     riders_dict = {}
     if content is not None:
         content_type, content_string = content.split(',')
@@ -267,6 +275,7 @@ def update_riders_data(content, name):
         # Assuming the uploaded file is YAML
         riders_dict = yaml.safe_load(decoded)
 
+    print(f'JF<--update_riders_data')
     return riders_dict
 
 
@@ -274,8 +283,10 @@ def update_riders_data(content, name):
     Output('map', 'children'),
     Output('map', 'center'),
     Input('memory-corrected_rides', 'data'),
+    prevent_initial_call=True
 )
 def update_map(rides):
+    print(f'JF-->update_map')
     children = []
     center = (0,0)
     if (rides is not None) and (len(rides) > 0):
@@ -302,6 +313,7 @@ def update_map(rides):
             ])
         ]
 
+    print(f'JF<--update_map')
     return children, center
 
 
@@ -313,6 +325,7 @@ def update_map(rides):
     prevent_initial_call=True,
 )
 def update_comparative_table(rides, riders_data):
+    print(f'JF-->update_comparative_table')
     table = []
     comparative_table = {}
 
@@ -322,6 +335,7 @@ def update_comparative_table(rides, riders_data):
 
         comparative_table = df_to_show.to_dict("records")
 
+    print(f'JF<--update_comparative_table')
     return table, comparative_table
 
 
@@ -331,6 +345,9 @@ def update_comparative_table(rides, riders_data):
     prevent_initial_call=True,
 )
 def show_download_button(output_table):
+    print(f'JF-->show_download_button')
+    print(f'JF<--show_download_button')
+
     return {'display': 'flex'}
 
 
@@ -340,8 +357,10 @@ def show_download_button(output_table):
     Input('memory-corrected_rides', 'data'),
     Input('leader-dropdown', 'value'),
     Input('riders_checklist', 'value'),
+    prevent_initial_call=True,
 )
 def update_leader_comparative(rides, leader, selected_riders):
+    print(f'JF-->update_leader_comparative')
     fig = make_subplots(specs=[[{"secondary_y": True}]])  #go.Figure()
     style = {'display': 'none'}
 
@@ -386,6 +405,7 @@ def update_leader_comparative(rides, leader, selected_riders):
         fig.update_yaxes(title_text="Difference (meters)", secondary_y=False)
         fig.update_yaxes(title_text="Altitude (meters)", secondary_y=True)
 
+    print(f'JF<--update_leader_comparative')
     return fig, style
 
 
@@ -396,6 +416,7 @@ def update_leader_comparative(rides, leader, selected_riders):
     prevent_initial_call=True,
 )
 def update_speed_comparison(rides):
+    print(f'JF-->update_speed_comparison')
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     style = {'display': 'none'}
 
@@ -431,6 +452,7 @@ def update_speed_comparison(rides):
         fig.update_yaxes(title_text="Speed (Km/h)", secondary_y=False)
         fig.update_yaxes(title_text="Altitude (meters)", secondary_y=True)
 
+    print(f'JF<--update_speed_comparison')
     return fig, style
 
 
@@ -441,6 +463,7 @@ def update_speed_comparison(rides):
     prevent_initial_call=True
 )
 def update_kilojoules_per_hour(rides):
+    print(f'JF-->update_kilojoules_per_hour')
     fig = make_subplots(specs=[[{"secondary_y": True}]])  # go.Figure()
     style = {'display': 'none'}
     if rides is not None and rides != {}:
@@ -475,6 +498,7 @@ def update_kilojoules_per_hour(rides):
         fig.update_yaxes(title_text="Energy (kJ)", secondary_y=False)
         fig.update_yaxes(title_text="Altitude (meters)", secondary_y=True)
 
+    print(f'JF<--update_kilojoules_per_hour')
     return fig, style
 
 
@@ -486,6 +510,7 @@ def update_kilojoules_per_hour(rides):
     prevent_initial_call=True
 )
 def update_start_time_div(rides):
+    print(f'JF-->update_start_time_div')
     #start_time_seconds = 0
     #end_time_seconds = 0
     #marks = {}
@@ -515,6 +540,7 @@ def update_start_time_div(rides):
 
         # memory['date'] = min_timestamp.date()
 
+    print(f'JF<--update_start_time_div')
     return min_timestamp.hour, min_timestamp.minute, min_timestamp.second
 
 
@@ -529,6 +555,7 @@ def update_start_time_div(rides):
 )
 #def correct_rides(n_clicks, rides, hour, minute, seconds):
 def correct_rides(hour, minute, seconds, rides):
+    print(f'JF-->correct_rides')
     corrected_rides = {}
 
     if rides is not None and rides != {}:
@@ -550,6 +577,7 @@ def correct_rides(hour, minute, seconds, rides):
 
             corrected_rides[rider] = corrected_data
 
+    print(f'JF<--correct_rides')
     return corrected_rides
 
 
@@ -560,8 +588,9 @@ def correct_rides(hour, minute, seconds, rides):
     prevent_initial_call=True,
 )
 def download(n_clicks, comparative_table):
+    print(f'JF-->download')
     df = pd.DataFrame(comparative_table)
-
+    print(f'JF<--download')
     return dcc.send_data_frame(df.to_excel, "comparative.xlsx", sheet_name="Sheet_name_1")
 
 
@@ -600,9 +629,11 @@ def build_htmlTable(df):
 
 
 def parse_contents(content_files, filenames):
+    print("JF--> parse_contents")
     data = {}
     suffix = '.fit.gz'
     for content, name in zip(content_files, filenames):
+        print(f"JF parsing {name}")
         if name.endswith(suffix):
             name = name[:-len(suffix)].lower()
 
@@ -622,6 +653,7 @@ def parse_contents(content_files, filenames):
                 'events': messages['event_mesgs']
             }
 
+    print("JF<-- parse_contents")
     return data
 
 
@@ -746,4 +778,6 @@ app.layout = html.Div(
 )
 
 if __name__ == "__main__":
-    app.run_server(debug=True, port=8050)
+    print("JF--> main")
+    app.run()
+    #app.run_server(debug=True, port=8050)
